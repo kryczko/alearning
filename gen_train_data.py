@@ -4,10 +4,16 @@ import argparse
 import numpy as np
 import ase.io as aseio
 import random
+import os
 
 random.seed(13)
 
+# constants
 pbc = 8.568
+k = 1 / ( 4 * np.pi * 8.85e-12)
+j_ev_conv = 1.6e-19
+n_atoms = 108
+
 
 coulomb_mapping = {
     'H': 1,
@@ -60,6 +66,7 @@ def parseArgs():
     parser.add_argument('--defects', '-de', help='Number of defects to introduce into the lattice.', dest='defects', default=0)
     parser.add_argument('--dopants', '-do', help='Dopants type followed by number of dopant atoms to insert into lattice.', dest='dopants', default=[], nargs='+')
     parser.add_argument('--number', '-n', help='Number of configurations to generate', dest='number', default=1)
+    parser.add_argument('--etarget', '-et', help='Target energy in eV when sampling lattices.', dest='etarget', default=-1000)
     return parser.parse_args()
 
 
@@ -71,20 +78,21 @@ def formatDopantsFromArgs(args):
 
 class Generator:
     def __init__(self, args):
-        self.lattice = np.empty([108, 3])
-        self.n = args.number
+        self.lattice = np.empty([n_atoms, 3])
+        self.n = int(args.number)
         self.args = args
         self.defect_indices = []
         self.dopant_indices = []
+        self.prev_en = None
+        self.traj = aseio.read('static/Al_MD.xyz', index=':', format='xyz')
+        print 'INFO: There are', len(self.traj), 'frame(s) in the MD file:', 'static/Al_MD.xyz'
 
     def getLattice(self):
         # read an xyz file and pick a random traj
-        traj = aseio.read('static/Al_MD.xyz', index=':', format='xyz')
-        print 'INFO: There are ', len(traj), ' in the MD file:', 'static/Al_MD.xyz'
-        index = random.randint(0, len(traj))
+        index = random.randint(0, len(self.traj) - 1)
         print 'INFO: Choosing trajectory:', index
 
-        atoms = traj[index]
+        atoms = self.traj[index]
         for i, atom in enumerate(atoms):
             self.lattice[i][0] = atom.position[0]
             self.lattice[i][1] = atom.position[1]
@@ -123,7 +131,7 @@ class Generator:
         return array
 
     def calculateEnergy(self):
-        z = np.empty(108)
+        z = np.empty(n_atoms)
         z.fill(13)
         total_dopant_count = 0
         for dopant, count in self.args.dopants:
@@ -135,19 +143,21 @@ class Generator:
 
         toten = 0.
 
-        for i in range(108):
-            for j in range(108):
+        for i in range(n_atoms):
+            for j in range(n_atoms):
                 if i != j:
                     r = self.pbc_wrap(abs(self.lattice[i] - self.lattice[j]))
                     toten += - ( z[i] * z[j] ) / np.linalg.norm(r, 2)
-        return toten / 2.
+        return j_ev_conv * k * toten / 2.
 
-    def writeLattice(self):
-        f = open('POSCAR_generated', 'w')
+    def writeLattice(self, lattice_ind):
+        if not os.path.exists('gen'):
+            os.mkdir('gen')
+        f = open('gen/POSCAR_gen_' + str(lattice_ind).zfill(3), 'w')
         f.write('generated-lattice\n1.0\n')
         f.write(str(pbc) + ' 0.000 0.000\n0.000 ' + str(pbc) + ' 0.000\n0.000 0.000 ' + str(pbc) + '\n')
         f.write('Al  ' + '  '.join([name for name, count in self.args.dopants]) + '\n')
-        f.write(str(108 - int(self.args.defects) - sum([count for name, count in self.args.dopants])) + '  ' + '  '.join([str(count) for name, count in self.args.dopants]) + '\nCartesian\n')
+        f.write(str(n_atoms - int(self.args.defects) - sum([count for name, count in self.args.dopants])) + '  ' + '  '.join([str(count) for name, count in self.args.dopants]) + '\nCartesian\n')
 
 
         for i, row in enumerate(self.lattice):
@@ -160,18 +170,25 @@ class Generator:
                  for val in self.lattice[self.dopant_indices[dopant_count]]]) + '\n')
                 dopant_count += 1
         f.close()
-                
+
+    def modifySlighty(self):
+        pass
 
     def start(self):
-        for i in range(self.n):
-            print "Generating configuration:", i
+        etarget = float(self.args.etarget)
+        n_good_lattices = 0
+        self.getLattice()
+        self.placeDefectsAndDopants()
+        self.prev_en = self.calculateEnergy()
+        while n_good_lattices < self.n:
             self.getLattice()
             self.placeDefectsAndDopants()
             en = self.calculateEnergy()
-            print 'Total energy of lattice:', en, 'J'
-            self.writeLattice()
-
-
+            if abs(etarget - en) < abs(etarget - self.prev_en):
+                self.writeLattice(n_good_lattices)
+                print 'INFO: Total Coulomb energy of lattice: %.5E eV' % en
+                n_good_lattices += 1
+            self.prev_en = en
 
 def main():
     args = parseArgs()
