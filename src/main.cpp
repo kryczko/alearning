@@ -13,5 +13,6 @@ int main(int argc, char ** argv) {
 	ArgParser parser(argc, argv);
 	int n_atoms = 108;
 	Generator g(n_atoms, parser);
+	cout << g.totalCoulombEnergy() << "\n";
 	return 0;
 }
