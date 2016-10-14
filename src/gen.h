@@ -173,7 +173,7 @@ class Generator {
             int rand_atom = -1;
             while (!valid_choice) {
                 rand_atom = this->rng.randint(0, this->n_atoms);
-                valid_choice = find(ignored_indices.begin(), ignored_indices.end(), rand_atom) != ignored_indices.end();
+                valid_choice = find(ignored_indices.begin(), ignored_indices.end(), rand_atom) == ignored_indices.end();
             }
             if (typeof == "defect") {
                 auto it = find(this->defect_indices.begin(), this->defect_indices.end(), choice);
