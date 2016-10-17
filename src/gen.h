@@ -42,7 +42,7 @@ class Generator {
                     xyzfile >> coords[0] >> coords[1] >> coords[2];
                     time_step.push_back(coords);
                     local_count ++;
-                    if (local_count % n_atoms == 0) {
+                    if (local_count % this->n_atoms == 0) {
                         md.push_back(time_step);
                         time_steps ++;
                     }
@@ -228,12 +228,41 @@ class Generator {
             return sqrt(area);
         }
 
-        void writeLattice(int lattice_ind) {
+        void writeXSF(int lattice_ind, double etarget, double toten) {
             if (!fs::exists("gen")) {
                 fs::create_directory("gen");
             }
             ofstream output;
-            output.open(("gen/POSCAR_gen_" + to_string(lattice_ind)).c_str());
+            output.open(("gen/gen_" + to_string(etarget) + "_" + to_string(lattice_ind) + ".xsf").c_str());
+            output << "# total energy = " << toten << "\n\nCRYSTAL\nPRIMVEC\n";
+            output << to_string(pbc) + " 0.000 0.000\n0.000 " + to_string(pbc) + " 0.000\n0.000 0.000 " + to_string(pbc) + "\n";
+            string counts = to_string(this->n_atoms - this->n_defects - this->n_dopants) + "  ";
+            output  << "PRIMCOORD\n";
+            output << this->n_atoms - this->n_defects << "  1\n"; 
+            for (int i = 0; i < this->lattice.size(); i ++) {
+                bool in_dopants = find(this->dopant_indices.begin(), this->dopant_indices.end(), i) != this->dopant_indices.end();
+                bool in_defects = find(this->defect_indices.begin(), this->defect_indices.end(), i) != this->defect_indices.end();
+                if (!in_dopants && !in_defects) {
+                    output << "Al  " << this->lattice[i][0] << "  " << this->lattice[i][1] << "  " << this->lattice[i][2] << "\n";
+                }
+            }
+            int total = 0;
+            for (int i = 0; i < this->dopants.size() / 2; i ++) {
+                for (int j = total; j < stoi(this->dopants[2*i + 1]); j ++) {
+                    output << this->dopants[2*i] << "  " << this->lattice[this->dopant_indices[j]][0] << "  " << this->lattice[this->dopant_indices[j]][1] << "  " << this->lattice[this->dopant_indices[j]][2] << "\n";
+                }
+                total += stoi(this->dopants[2*i + 1]);
+            }
+            output.close();
+
+        }
+
+        void writePOSCAR(int lattice_ind, double etarget) {
+            if (!fs::exists("gen")) {
+                fs::create_directory("gen");
+            }
+            ofstream output;
+            output.open(("gen/POSCAR_gen_" + to_string(etarget) + "_" + to_string(lattice_ind)).c_str());
             output << "generated-lattice\n1.0\n";
             output << to_string(pbc) + " 0.000 0.000\n0.000 " + to_string(pbc) + " 0.000\n0.000 0.000 " + to_string(pbc) + "\n";
             output << "Al";
@@ -271,11 +300,11 @@ class Generator {
             }
             this->etarget = parser["etarget"].as<double>();
             this->rng = Rng(parser["seed"].as<int>());
-            this->printConfig();
-
             this->readXyzFile();
             this->setLattice();
             this->placeDefectsAndDopants();
+            this->printConfig();
+
         } 
 };
 
