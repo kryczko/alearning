@@ -8,7 +8,13 @@ int main(int argc, char ** argv) {
 	int n_atoms = 108, n_configs = parser["number"].as<int>();
 	Generator g(n_atoms, parser);
 	// targetEnergy(g1, n_configs);
-	// tempSweep(g1, n_configs, true);
-	equilTest(g, n_configs);
+	// tempSweep(g, n_configs, true);
+	cout << "\nFinding energy range...\n";
+	double emin = eMin(g, n_configs);
+	double emax = eMax(g, n_configs);
+	cout << "Min Coulomb energy: " << emin << endl;
+	cout << "Max Coulomb energy: " << emax << endl;
+	generateLattices(g, n_configs, emin, emax, 10);
+	// equilTest(g, n_configs);
 	return 0;
 }

@@ -9,7 +9,7 @@
 
 #include "gen.h"
 
-void targetEnergy(Generator g1, int n_configs) {
+void targetEnergy(Generator g1, int n_configs, double etarget) {
     int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
     double delta_E(0.0);
     vector<double> energies, distances;
@@ -19,12 +19,12 @@ void targetEnergy(Generator g1, int n_configs) {
         g2.modifySlightly();
         // g2.printDopantAndDefectIndices();
         double g2_en = g2.totalCoulombEnergy();
-        double e_prev = abs(g1_en - g1.etarget);
-        double e_next = abs(g2_en - g1.etarget);
+        double e_prev = abs(g1_en - etarget);
+        double e_next = abs(g2_en - etarget);
 
         if (e_next < e_prev) {
             g1 = g2;
-            g1.writeLattice(n_good_lattices);
+            g1.writeXSF(n_good_lattices, etarget, g2_en);
             g1_en = g2_en;
             n_good_lattices ++;
         } else {
@@ -32,7 +32,7 @@ void targetEnergy(Generator g1, int n_configs) {
             double val = exp( - 0.5 * abs(e_prev - e_next));
             if (val > uni) {
                 g1 = g2;
-                g1.writeLattice(n_good_lattices);
+                g1.writeXSF(n_good_lattices, etarget, g2_en);
                 g1_en = g2_en;
                 n_good_lattices ++;
             } else {
@@ -44,6 +44,14 @@ void targetEnergy(Generator g1, int n_configs) {
                 }
             }
         }
+    }
+}
+
+void generateLattices(Generator g, int n_configs, double emin, double emax, int steps) {
+    double incr = (emax - emin) / steps;
+    #pragma omp parallel for
+    for (int i = 0; i < steps; i ++) {
+        targetEnergy(g, n_configs, emin + i*incr);
     }
 }
 
@@ -60,7 +68,7 @@ vector<double> runningAverage(vector<double> stuff) {
 }
 
 void equilTest(Generator g, int n_configs) {
-    vector<double> beta_vals = {0, 0.001, 0.01, 0.1, 1, 10};
+    vector<double> beta_vals = {0};
 
     vector<vector<double>> all_energies(beta_vals.size()), all_areas(beta_vals.size());
 
@@ -84,7 +92,7 @@ void equilTest(Generator g, int n_configs) {
             double e_prev = g1_en;
             double e_next = g2_en;
 
-            if (e_next < e_prev) {
+            if (e_next > e_prev) {
                 g1 = g2;
                 // g1.writeLattice(n_good_lattices);
                 g1_en = g2_en;
@@ -139,14 +147,139 @@ void equilTest(Generator g, int n_configs) {
     output.close();
 }
 
+double max(vector<double> array) {
+    if (!array.size()) {
+        return -1;
+    }
+    double max_val = array[0];
+    for (int i = 1; i < array.size(); i ++) {
+        if (array[i] > max_val) {
+            max_val = array[i];
+        }
+    }
+    return max_val;
+}
+
+double min(vector<double> array) {
+    if (!array.size()) {
+        return -1;
+    }
+    double min_val = array[0];
+    for (int i = 1; i < array.size(); i ++) {
+        if (array[i] < min_val) {
+            min_val = array[i];
+        }
+    }
+    return min_val;
+}
+
+double eMin(Generator g, int n_configs) {
+    double beta;
+    vector<double> energies;
+    beta = 1e10;
+    Generator g1(g);
+    g1.setSeed(g.getSeed());
+    g1.setLattice();
+    g1.placeDefectsAndDopants();
+    int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
+    double delta_E(0.0);
+    double g1_en = g1.totalCoulombEnergy();
+    while (n_good_lattices < n_configs) {
+        Generator g2(g1);
+        g2.modifySlightly();
+        // g2.printDopantAndDefectIndices();
+        double g2_en = g2.totalCoulombEnergy();
+        double e_prev = g1_en;
+        double e_next = g2_en;
+
+        if (e_next < e_prev) {
+            g1 = g2;
+            // g1.writeLattice(n_good_lattices);
+            g1_en = g2_en;
+            energies.push_back(g1_en);
+            n_good_lattices ++;
+        } else {
+            double uni = g1.rng.random();
+            double val = exp( - beta * abs(e_prev - e_next));
+            if (val > uni) {
+                g1 = g2;
+                // g1.writeLattice(n_good_lattices);
+                g1_en = g2_en;
+                energies.push_back(g1_en);
+                n_good_lattices ++;
+            } 
+            // else {
+            //     local_stuck_count ++;
+            //     if (local_stuck_count > 999) {
+            //         g1.placeDefectsAndDopants();
+            //         g1_en = g1.totalCoulombEnergy();
+            //         local_stuck_count = 0;
+            //     }
+            // }
+        }
+    }
+    return min(energies);
+}
+
+double eMax(Generator g, int n_configs) {
+    double beta;
+    vector<double> energies;
+    beta = 0.0;
+    Generator g1(g);
+    g1.setSeed(g.getSeed());
+    g1.setLattice();
+    g1.placeDefectsAndDopants();
+    int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
+    double delta_E(0.0);
+    double g1_en = g1.totalCoulombEnergy();
+    while (n_good_lattices < n_configs) {
+        Generator g2(g1);
+        g2.modifySlightly();
+        // g2.printDopantAndDefectIndices();
+        double g2_en = g2.totalCoulombEnergy();
+        double e_prev = g1_en;
+        double e_next = g2_en;
+
+        if (e_next > e_prev) {
+            g1 = g2;
+            // g1.writeLattice(n_good_lattices);
+            g1_en = g2_en;
+            energies.push_back(g1_en);
+            n_good_lattices ++;
+        } else {
+            double uni = g1.rng.random();
+            double val = exp( - beta * abs(e_prev - e_next));
+            if (val > uni) {
+                g1 = g2;
+                // g1.writeLattice(n_good_lattices);
+                g1_en = g2_en;
+                energies.push_back(g1_en);
+                n_good_lattices ++;
+            } 
+            // else {
+            //     local_stuck_count ++;
+            //     if (local_stuck_count > 999) {
+            //         g1.placeDefectsAndDopants();
+            //         g1_en = g1.totalCoulombEnergy();
+            //         local_stuck_count = 0;
+            //         exit(-1);
+            //     }
+            // }
+        }
+    }
+    return max(energies);
+}
+
 
 void tempSweep(Generator g, int n_configs, bool flipped=false) {
     vector<double> beta_vals;
-    int n_betas = 100;
-    double start = 0.0, end = 10.0, incr = (end - start) / n_betas;
-    for (int i = 0; i < n_betas; i ++) {
-        beta_vals.push_back(start + incr*i);
-    }
+    int n_betas = 2;
+    // double start = 0.0, end = 10.0, incr = (end - start) / n_betas;
+    // for (int i = 0; i < n_betas; i ++) {
+    //     beta_vals.push_back(start + incr*i);
+    // }
+    beta_vals.push_back(0.0);
+    beta_vals.push_back(1e10);
 
     vector<vector<double>> all_energies(n_betas), all_areas(n_betas);
 
@@ -262,10 +395,16 @@ void tempSweep(Generator g, int n_configs, bool flipped=false) {
     }
     ofstream output;
     output.open("output/beta_vs_E_vs_A.dat");
-    for (int i = 0; i < beta_vals.size(); i ++) {
-        double avg_en = accumulate(all_energies[i].begin(), all_energies[i].end(), 0.0) / all_energies[i].size();
-        double avg_area = accumulate(all_areas[i].begin(), all_areas[i].end(), 0.0) / all_areas[i].size();
-        output << beta_vals[i] << "\t" << avg_en << "\t" << avg_area << "\n";
+    output << "# beta vals\n#";
+    for (auto val: beta_vals) {
+        output << val << "  ";
+    }
+    output << "\n";
+    for (int j = 0; j < n_configs; j ++ ) {
+        for (int i = 0; i < beta_vals.size(); i ++) {
+            output << all_energies[i][j] << "  ";
+        }
+        output << "\n";
     }
     output.close();
 
