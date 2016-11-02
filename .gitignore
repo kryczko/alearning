@@ -1,3 +1,6 @@
+*.xyz
+*.xml
+
 gen/
 output/
 # Byte-compiled / optimized / DLL files

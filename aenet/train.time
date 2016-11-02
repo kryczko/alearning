@@ -1,0 +1,8 @@
+       0.29 s     Training set initialized.
+       1.76 s     Structures distributed over processes
+       1.76 s     Optimization method (lm) initialized.
+     158.45 s     Initial energies evaluated (before training)
+     158.45 s     Training finished.
+       0.00 s     Total time spent for training set.
+       0.00 s     Total time spent for testing set.
+     158.49 s     Timing finished.
