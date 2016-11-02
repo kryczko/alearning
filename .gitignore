@@ -1,6 +1,6 @@
 *.xyz
 *.xml
-
+aenet/
 gen/
 output/
 # Byte-compiled / optimized / DLL files
