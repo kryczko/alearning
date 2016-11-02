@@ -19,6 +19,7 @@ using namespace std;
 class Generator {
     private:
         vector<vector <double>> lattice;
+        vector<vector <double>> forces;
         vector<vector<vector <double>>> md;
         vector<int> defect_indices, dopant_indices, z;
         vector<string> dopants;
@@ -43,7 +44,8 @@ class Generator {
                     time_step.push_back(coords);
                     local_count ++;
                     if (local_count % this->n_atoms == 0) {
-                        md.push_back(time_step);
+                        this->md.push_back(time_step);
+                        time_step.clear();
                         time_steps ++;
                     }
                 }
@@ -137,8 +139,9 @@ class Generator {
                     if (i != j) {
                         vector<double> atom1 = this->lattice[i];
                         vector<double> atom2 = this->lattice[j];
-                        double dist = r(atom1, atom2);
-                        toten += (z[i] * z[j]) / dist;
+                        double dist = r(atom1, atom2) * 10e-10;
+                        double numer = e * e * J_to_eV * k * z[i] * z[j];
+                        toten += numer / dist;
                     }
                 }
             }
@@ -228,13 +231,51 @@ class Generator {
             return sqrt(area);
         }
 
+        void calculateForces() {
+            vector<int> z(this->n_atoms, 13); // 13 for Al
+            int dopant_count = 0;
+            for (int i = 0; i < this->dopants.size() / 2; i ++) {
+                string name = this->dopants[2 * i];
+                int count = stoi(this->dopants[2 * i + 1]);
+                for (int j = 0; j < count; j ++) {
+                    z[this->dopant_indices[dopant_count]] = coulomb_mapping.at(name);
+                }
+            }
+            for (int index : this->defect_indices) {
+                z[index] = 0;
+            }
+            for (int i = 0; i < this->lattice.size(); i ++) {
+                double fx(0.0), fy(0.0), fz(0.0);
+                for (int j = 0; j < this->lattice.size(); j++) {
+                    if (i != j) {
+                        double xdist = pbc_wrap(this->lattice[i][0] - this->lattice[j][0]) * 10e-10;
+                        double ydist = pbc_wrap(this->lattice[i][1] - this->lattice[j][1]) * 10e-10;
+                        double zdist = pbc_wrap(this->lattice[i][2] - this->lattice[j][2]) * 10e-10;
+                        double dist = r(this->lattice[i], this->lattice[j]) * 10e-10;
+                        double denom = dist * dist * dist;
+                        double numer = e * e * N_to_eV_per_A * k * z[i] * z[j];
+
+                        fx += numer * xdist / denom;
+                        fy += numer * ydist / denom;
+                        fz += numer * zdist / denom;                        
+                    }
+                }
+                vector<double> force = {fx, fy, fz};
+                this->forces.push_back(force);
+             }
+        }
+
         void writeXSF(int lattice_ind, double etarget, double toten) {
+            this->calculateForces();
             if (!fs::exists("gen")) {
                 fs::create_directory("gen");
             }
+            if (!fs::exists("gen/xsf")) {
+                fs::create_directory("gen/xsf");
+            }
             ofstream output;
-            output.open(("gen/gen_" + to_string(etarget) + "_" + to_string(lattice_ind) + ".xsf").c_str());
-            output << "# total energy = " << toten << "\n\nCRYSTAL\nPRIMVEC\n";
+            output.open(("gen/xsf/gen_" + to_string(etarget) + "_" + to_string(lattice_ind) + ".xsf").c_str());
+            output << "# total energy = " << toten << " eV\n\nCRYSTAL\nPRIMVEC\n";
             output << to_string(pbc) + " 0.000 0.000\n0.000 " + to_string(pbc) + " 0.000\n0.000 0.000 " + to_string(pbc) + "\n";
             string counts = to_string(this->n_atoms - this->n_defects - this->n_dopants) + "  ";
             output  << "PRIMCOORD\n";
@@ -243,13 +284,13 @@ class Generator {
                 bool in_dopants = find(this->dopant_indices.begin(), this->dopant_indices.end(), i) != this->dopant_indices.end();
                 bool in_defects = find(this->defect_indices.begin(), this->defect_indices.end(), i) != this->defect_indices.end();
                 if (!in_dopants && !in_defects) {
-                    output << "Al  " << this->lattice[i][0] << "  " << this->lattice[i][1] << "  " << this->lattice[i][2] << "\n";
+                    output << "Al  " << this->lattice[i][0] << "  " << this->lattice[i][1] << "  " << this->lattice[i][2] << "  " << this->forces[i][0] << "  " << this->forces[i][1] << "  " << this->forces[i][2] << "\n";
                 }
             }
             int total = 0;
             for (int i = 0; i < this->dopants.size() / 2; i ++) {
                 for (int j = total; j < stoi(this->dopants[2*i + 1]); j ++) {
-                    output << this->dopants[2*i] << "  " << this->lattice[this->dopant_indices[j]][0] << "  " << this->lattice[this->dopant_indices[j]][1] << "  " << this->lattice[this->dopant_indices[j]][2] << "\n";
+                    output << this->dopants[2*i] << "  " << this->lattice[this->dopant_indices[j]][0] << "  " << this->lattice[this->dopant_indices[j]][1] << "  " << this->lattice[this->dopant_indices[j]][2] << "  " << this->forces[this->dopant_indices[j]][0] << "  " << this->forces[this->dopant_indices[j]][1] << "  " << this->forces[this->dopant_indices[j]][2] << endl;
                 }
                 total += stoi(this->dopants[2*i + 1]);
             }
@@ -258,11 +299,11 @@ class Generator {
         }
 
         void writePOSCAR(int lattice_ind, double etarget) {
-            if (!fs::exists("gen")) {
-                fs::create_directory("gen");
+            if (!fs::exists("gen/poscar")) {
+                fs::create_directory("gen/poscar");
             }
             ofstream output;
-            output.open(("gen/POSCAR_gen_" + to_string(etarget) + "_" + to_string(lattice_ind)).c_str());
+            output.open(("gen//poscar/POSCAR_gen_" + to_string(etarget) + "_" + to_string(lattice_ind)).c_str());
             output << "generated-lattice\n1.0\n";
             output << to_string(pbc) + " 0.000 0.000\n0.000 " + to_string(pbc) + " 0.000\n0.000 0.000 " + to_string(pbc) + "\n";
             output << "Al";
