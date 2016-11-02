@@ -1,0 +1,14 @@
+TRAININGSET AlTi.train
+TESTPERCENT   0
+ITERATIONS    0
+
+TIMING
+
+METHOD
+lm batchsize=5000 learnrate=0.1d0 iter=3 conv=0.001 adjust=5.0
+
+NETWORKS
+! atom   network        hidden
+! types  file-name      layers  nodes:activation
+  Al     Al.10t-10t.ann    2    10:twist 10:twist
+  Ti     Ti.10t-10t.ann    2    10:twist 10:twist
