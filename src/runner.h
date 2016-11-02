@@ -206,8 +206,9 @@ double eMin(Generator g, int n_configs) {
                 // g1.writeLattice(n_good_lattices);
                 g1_en = g2_en;
                 energies.push_back(g1_en);
-                n_good_lattices ++;
-            } 
+            }
+
+            n_good_lattices ++;
             // else {
             //     local_stuck_count ++;
             //     if (local_stuck_count > 999) {
@@ -254,8 +255,9 @@ double eMax(Generator g, int n_configs) {
                 // g1.writeLattice(n_good_lattices);
                 g1_en = g2_en;
                 energies.push_back(g1_en);
-                n_good_lattices ++;
-            } 
+            }
+
+            n_good_lattices ++;
             // else {
             //     local_stuck_count ++;
             //     if (local_stuck_count > 999) {

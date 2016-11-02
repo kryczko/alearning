@@ -9,6 +9,11 @@ typedef std::unordered_map<std::string, int> str_to_int_dict;
 
 const double pbc = 8.568;
 const double half_pbc = pbc / 2.0;
+const double N_to_eV_per_A = 51.421 / 8.2387225e-8;
+const double J_to_eV = 27.211385 / 4.35974417e-18;
+const double k = 1 / ( 4 * 3.14159 * 8.854167e-12);
+const double e = 1.60217e-19;
+
 const str_to_int_dict coulomb_mapping (
 	{
 		{"H",1},
@@ -58,8 +63,14 @@ const str_to_int_dict coulomb_mapping (
 
 
 double pbc_wrap(double val) {
-	if (val > half_pbc) {
-		return val -= half_pbc;
+	if (val >= 0) {
+		if (val > half_pbc) {
+			return val -= half_pbc;
+		} 
+	} else if (val < 0) {
+		if (abs(val) > half_pbc) {
+			return val += half_pbc;
+		}
 	}
 	return val;
 }
