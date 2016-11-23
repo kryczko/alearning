@@ -13,7 +13,9 @@ void targetEnergy(Generator g1, int n_configs, double etarget, double beta) {
     int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
     double delta_E(0.0);
     vector<double> energies, distances;
-    double g1_en = g1.totalCoulombEnergy();
+    g1.writeXSF(n_good_lattices, beta, 1.0);
+    double g1_en = g1.aenetEnergy(n_good_lattices, beta);
+    g1.rmXSF(n_good_lattices, beta, 1.0);
     int loop_count = 0;
     while (n_good_lattices < n_configs) {
         Generator g2(g1);
@@ -23,7 +25,9 @@ void targetEnergy(Generator g1, int n_configs, double etarget, double beta) {
         loop_count ++;
         g2.modifySlightly();
         // g2.printDopantAndDefectIndices();
-        double g2_en = g2.totalCoulombEnergy();
+        g2.writeXSF(n_good_lattices, beta, 1.0);
+        double g2_en = g2.aenetEnergy(n_good_lattices, beta);
+        g2.rmXSF(n_good_lattices, beta, 1.0);
         double e_prev = abs(g1_en - etarget);
         double e_next = abs(g2_en - etarget);
 
@@ -75,7 +79,7 @@ vector<double> runningAverage(vector<double> stuff) {
 }
 
 void equilTest(Generator g, int n_configs) {
-    vector<double> beta_vals = {0.001, 0.01, 0.1, 1.0, 10.0};
+    vector<double> beta_vals = {0.001};
 
     vector<vector<double>> all_energies(beta_vals.size()), all_areas(beta_vals.size());
 
@@ -90,14 +94,16 @@ void equilTest(Generator g, int n_configs) {
         int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
         double delta_E(0.0);
         vector<double> energies, areas;
-        g1.writeXSF(n_good_lattices, beta, 1.0);
+        g1.writeXSF(n_good_lattices, beta, 1.0, true);
         double g1_en = g1.aenetEnergy(n_good_lattices, beta);
+        g1.rmXSF(n_good_lattices, beta, 1.0, true);
         while (n_good_lattices < n_configs) {
             Generator g2(g1);
             g2.modifySlightly();
             // g2.printDopantAndDefectIndices();
-            g2.writeXSF(n_good_lattices, beta, 1.0);
+            g2.writeXSF(n_good_lattices, beta, 1.0, true);
             double g2_en = g2.aenetEnergy(n_good_lattices, beta);
+            g2.rmXSF(n_good_lattices, beta, 1.0, true);
             double e_prev = g1_en;
             double e_next = g2_en;
 

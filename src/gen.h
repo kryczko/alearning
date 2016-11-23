@@ -139,12 +139,12 @@ class Generator {
 
         double aenetEnergy(int lattice_ind, double etarget) {
             char out[1000], aout[1000];
-            sprintf(out, "gen/xsf/gen_%0.1f_%06d.xsf", etarget, lattice_ind);
+            sprintf(out, "memory/gen_%0.1f_%06d.xsf", etarget, lattice_ind);
             sprintf(aout, "predict_%0.10f.out", etarget);
             string strout(out), straout(aout);
             // cout << "mpirun -np 4 /opt/aenet-1.0.0/bin/predict.x-1.0.0-gfortran_mpi static/predict.in " + strout + " > output/" + straout << endl;
-            int syscall = system(("mpirun -np 4 /opt/aenet-1.0.0/bin/predict.x-1.0.0-gfortran_mpi static/predict.in " + strout + " > output/" + straout + " 2>&1").c_str());
-            ifstream energy_file(("output/" + straout).c_str());
+            int syscall = system(("mpirun -np 4 /opt/aenet-1.0.0/bin/predict.x-1.0.0-gfortran_mpi static/predict.in " + strout + " > memory/" + straout + " 2>&1").c_str());
+            ifstream energy_file(("memory/" + straout).c_str());
             string stuff;
             double energy = 0.0;
             for (string line; getline(energy_file, line);) {
@@ -313,7 +313,17 @@ class Generator {
              }
         }
 
-        void writeXSF(int lattice_ind, double etarget, double toten) {
+        void rmXSF(int lattice_ind, double etarget, double toten, bool memory=false) {
+            char out[1000];
+            if (memory) {
+            sprintf(out, "rm memory/gen_%0.1f_%06d.xsf", etarget, lattice_ind); 
+            } else { 
+            sprintf(out, "rm gen/xsf/gen_%0.1f_%06d.xsf", etarget, lattice_ind); 
+            }
+            system(out);
+        }
+
+        void writeXSF(int lattice_ind, double etarget, double toten, bool memory=false) {
             this->calculateForces();
             if (!fs::exists("gen")) {
                 fs::create_directory("gen");
@@ -323,7 +333,11 @@ class Generator {
             }
             ofstream output;
             char out[1000];
-            sprintf(out, "gen/xsf/gen_%0.1f_%06d.xsf", etarget, lattice_ind); 
+            if (memory) {
+                sprintf(out, "memory/gen_%0.1f_%06d.xsf", etarget, lattice_ind); 
+            } else {
+                sprintf(out, "gen/xsf/gen_%0.1f_%06d.xsf", etarget, lattice_ind); 
+            }
             output.open(out);
             output << "# total energy = " << toten << " eV\n\nCRYSTAL\nPRIMVEC\n";
             output << to_string(pbc) + " 0.000 0.000\n0.000 " + to_string(pbc) + " 0.000\n0.000 0.000 " + to_string(pbc) + "\n";
