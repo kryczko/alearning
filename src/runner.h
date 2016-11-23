@@ -9,13 +9,18 @@
 
 #include "gen.h"
 
-void targetEnergy(Generator g1, int n_configs, double etarget) {
+void targetEnergy(Generator g1, int n_configs, double etarget, double beta) {
     int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
     double delta_E(0.0);
     vector<double> energies, distances;
     double g1_en = g1.totalCoulombEnergy();
+    int loop_count = 0;
     while (n_good_lattices < n_configs) {
         Generator g2(g1);
+        if (loop_count % 100 == 0) {
+            g2.setLattice();
+        }
+        loop_count ++;
         g2.modifySlightly();
         // g2.printDopantAndDefectIndices();
         double g2_en = g2.totalCoulombEnergy();
@@ -25,14 +30,16 @@ void targetEnergy(Generator g1, int n_configs, double etarget) {
         if (e_next < e_prev) {
             g1 = g2;
             g1.writeXSF(n_good_lattices, etarget, g2_en);
+            g1.writePOSCAR(n_good_lattices, etarget);
             g1_en = g2_en;
             n_good_lattices ++;
         } else {
             double uni = g1.rng.random();
-            double val = exp( - 0.5 * abs(e_prev - e_next));
+            double val = exp( - beta * abs(e_prev - e_next));
             if (val > uni) {
                 g1 = g2;
                 g1.writeXSF(n_good_lattices, etarget, g2_en);
+                g1.writePOSCAR(n_good_lattices, etarget);
                 g1_en = g2_en;
                 n_good_lattices ++;
             } else {
@@ -47,11 +54,11 @@ void targetEnergy(Generator g1, int n_configs, double etarget) {
     }
 }
 
-void generateLattices(Generator g, int n_configs, double emin, double emax, int steps) {
+void generateLattices(Generator g, int n_configs, double emin, double emax, int steps, double beta) {
     double incr = (emax - emin) / steps;
     #pragma omp parallel for
     for (int i = 0; i < steps; i ++) {
-        targetEnergy(g, n_configs, emin + i*incr);
+        targetEnergy(g, n_configs, emin + i*incr, beta);
     }
 }
 
@@ -68,7 +75,7 @@ vector<double> runningAverage(vector<double> stuff) {
 }
 
 void equilTest(Generator g, int n_configs) {
-    vector<double> beta_vals = {0};
+    vector<double> beta_vals = {0.001, 0.01, 0.1, 1.0, 10.0};
 
     vector<vector<double>> all_energies(beta_vals.size()), all_areas(beta_vals.size());
 
@@ -83,12 +90,14 @@ void equilTest(Generator g, int n_configs) {
         int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
         double delta_E(0.0);
         vector<double> energies, areas;
-        double g1_en = g1.totalCoulombEnergy();
+        g1.writeXSF(n_good_lattices, beta, 1.0);
+        double g1_en = g1.aenetEnergy(n_good_lattices, beta);
         while (n_good_lattices < n_configs) {
             Generator g2(g1);
             g2.modifySlightly();
             // g2.printDopantAndDefectIndices();
-            double g2_en = g2.totalCoulombEnergy();
+            g2.writeXSF(n_good_lattices, beta, 1.0);
+            double g2_en = g2.aenetEnergy(n_good_lattices, beta);
             double e_prev = g1_en;
             double e_next = g2_en;
 
@@ -99,6 +108,7 @@ void equilTest(Generator g, int n_configs) {
                 energies.push_back(g1_en);
                 areas.push_back(g1.areaOfDopantsAndDefects());
                 n_good_lattices ++;
+                cout << "Beta val: " << beta << ", iteration: " << n_good_lattices << endl;
             } else {
                 double uni = g1.rng.random();
                 double val = exp( - beta * abs(e_prev - e_next));
@@ -109,6 +119,7 @@ void equilTest(Generator g, int n_configs) {
                     energies.push_back(g1_en);
                     areas.push_back(g1.areaOfDopantsAndDefects());
                     n_good_lattices ++;
+                    cout << "Beta val: " << beta << ", iteration: " << n_good_lattices << endl;
                 } 
                 // else {
                 //     local_stuck_count ++;
@@ -184,8 +195,13 @@ double eMin(Generator g, int n_configs) {
     int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
     double delta_E(0.0);
     double g1_en = g1.totalCoulombEnergy();
+    int loop_count = 0;
     while (n_good_lattices < n_configs) {
         Generator g2(g1);
+        if (loop_count % 100 == 0) {
+            g2.setLattice();
+        }
+        loop_count ++;
         g2.modifySlightly();
         // g2.printDopantAndDefectIndices();
         double g2_en = g2.totalCoulombEnergy();
@@ -233,8 +249,13 @@ double eMax(Generator g, int n_configs) {
     int n_good_lattices(0), total_count(0), beta_count(0), local_stuck_count(0);
     double delta_E(0.0);
     double g1_en = g1.totalCoulombEnergy();
+    int loop_count = 0;
     while (n_good_lattices < n_configs) {
         Generator g2(g1);
+        if (loop_count % 100 == 0) {
+            g2.setLattice();
+        }
+        loop_count ++;
         g2.modifySlightly();
         // g2.printDopantAndDefectIndices();
         double g2_en = g2.totalCoulombEnergy();

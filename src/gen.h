@@ -6,6 +6,9 @@
 #include <string> 
 #include <iostream>
 #include <random>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sstream>
 
 #include "rng.h"
 #include "argparser.h"
@@ -88,14 +91,20 @@ class Generator {
             this->dopant_indices.clear();
             this->defect_indices.clear();
             int total = this->n_dopants + this->n_defects;
+
             for (int i = 0; i < total; i ++) {
                 int rand_index = -1;
-                bool in_dopant_vector = true;
-                bool in_defect_vector = true;
-                while (in_dopant_vector && in_defect_vector) {
+                bool in = true;
+                vector<int> all_indices;
+                for (auto elem : this->dopant_indices) {
+                    all_indices.push_back(elem);
+                }
+                for (auto elem: this->defect_indices) {
+                    all_indices.push_back(elem);
+                }
+                while (in) {
                     rand_index = this->rng.randint(0, this->n_atoms);
-                    in_dopant_vector = find(this->dopant_indices.begin(), this->dopant_indices.end(), rand_index) != this->dopant_indices.end();
-                    in_defect_vector = find(this->defect_indices.begin(), this->defect_indices.end(), rand_index) != this->defect_indices.end();
+                    in = find(all_indices.begin(), all_indices.end(), rand_index) != all_indices.end();
                 }
                 if (i < this->n_dopants) {
                     this->dopant_indices.push_back(rand_index);
@@ -117,6 +126,36 @@ class Generator {
             cout << "Number of defects: " << this->n_defects << endl;
             cout << "Energy target: " << this->etarget << endl;
             cout << "Random seed: " << this->seed << endl;
+        }
+
+        void split(const string &s, char delim, vector<string> &elems) {
+            stringstream ss;
+            ss.str(s);
+            std::string item;
+            while (std::getline(ss, item, delim)) {
+                elems.push_back(item);
+            }
+        }
+
+        double aenetEnergy(int lattice_ind, double etarget) {
+            char out[1000], aout[1000];
+            sprintf(out, "gen/xsf/gen_%0.1f_%06d.xsf", etarget, lattice_ind);
+            sprintf(aout, "predict_%0.10f.out", etarget);
+            string strout(out), straout(aout);
+            // cout << "mpirun -np 4 /opt/aenet-1.0.0/bin/predict.x-1.0.0-gfortran_mpi static/predict.in " + strout + " > output/" + straout << endl;
+            int syscall = system(("mpirun -np 4 /opt/aenet-1.0.0/bin/predict.x-1.0.0-gfortran_mpi static/predict.in " + strout + " > output/" + straout + " 2>&1").c_str());
+            ifstream energy_file(("output/" + straout).c_str());
+            string stuff;
+            double energy = 0.0;
+            for (string line; getline(energy_file, line);) {
+                if (line.find("Total energy") != string::npos) {
+                    // we found the total energy
+                    vector<string> items;
+                    split(line, ' ', items);
+                    energy = stof(items[items.size() - 2]);
+                }
+            }
+            return energy;
         }
 
         double totalCoulombEnergy() {
@@ -196,7 +235,16 @@ class Generator {
                 rand_atom = this->rng.randint(0, this->n_atoms);
                 valid_choice = find(ignored_indices.begin(), ignored_indices.end(), rand_atom) == ignored_indices.end();
             }
-
+            bool chose_other_atom_index = find(all_indices.begin(), all_indices.end(), rand_atom) != all_indices.end();
+            if (chose_other_atom_index) {
+                auto other_it = find(all_indices.begin(), all_indices.end(), rand_atom);
+                int index = distance(all_indices.begin(), other_it);
+                if (index < this->n_dopants) {
+                    this->dopant_indices[index] = choice;
+                } else {
+                    this->defect_indices[index - this->n_dopants] = choice;
+                }
+            }
             if (typeof == "defect") {
                 auto it = find(this->defect_indices.begin(), this->defect_indices.end(), choice);
                 int index = distance(this->defect_indices.begin(), it);
@@ -274,7 +322,9 @@ class Generator {
                 fs::create_directory("gen/xsf");
             }
             ofstream output;
-            output.open(("gen/xsf/gen_" + to_string(etarget) + "_" + to_string(lattice_ind) + ".xsf").c_str());
+            char out[1000];
+            sprintf(out, "gen/xsf/gen_%0.1f_%06d.xsf", etarget, lattice_ind); 
+            output.open(out);
             output << "# total energy = " << toten << " eV\n\nCRYSTAL\nPRIMVEC\n";
             output << to_string(pbc) + " 0.000 0.000\n0.000 " + to_string(pbc) + " 0.000\n0.000 0.000 " + to_string(pbc) + "\n";
             string counts = to_string(this->n_atoms - this->n_defects - this->n_dopants) + "  ";
@@ -289,7 +339,7 @@ class Generator {
             }
             int total = 0;
             for (int i = 0; i < this->dopants.size() / 2; i ++) {
-                for (int j = total; j < stoi(this->dopants[2*i + 1]); j ++) {
+                for (int j = total; j < stoi(this->dopants[2*i + 1]) + total; j ++) {
                     output << this->dopants[2*i] << "  " << this->lattice[this->dopant_indices[j]][0] << "  " << this->lattice[this->dopant_indices[j]][1] << "  " << this->lattice[this->dopant_indices[j]][2] << "  " << this->forces[this->dopant_indices[j]][0] << "  " << this->forces[this->dopant_indices[j]][1] << "  " << this->forces[this->dopant_indices[j]][2] << endl;
                 }
                 total += stoi(this->dopants[2*i + 1]);
@@ -303,7 +353,9 @@ class Generator {
                 fs::create_directory("gen/poscar");
             }
             ofstream output;
-            output.open(("gen//poscar/POSCAR_gen_" + to_string(etarget) + "_" + to_string(lattice_ind)).c_str());
+            char out[1000];
+            sprintf(out, "gen//poscar/POSCAR_gen_%0.1f_%06d", etarget, lattice_ind); 
+            output.open(out);
             output << "generated-lattice\n1.0\n";
             output << to_string(pbc) + " 0.000 0.000\n0.000 " + to_string(pbc) + " 0.000\n0.000 0.000 " + to_string(pbc) + "\n";
             output << "Al";
@@ -319,12 +371,16 @@ class Generator {
                 bool in_dopants = find(this->dopant_indices.begin(), this->dopant_indices.end(), i) != this->dopant_indices.end();
                 bool in_defects = find(this->defect_indices.begin(), this->defect_indices.end(), i) != this->defect_indices.end();
                 if (!in_dopants && !in_defects) {
-                    output << this->lattice[i][0] << "  " << this->lattice[i][1] << "  " << this->lattice[i][1] << "\n";
+                    output << this->lattice[i][0] << "  " << this->lattice[i][1] << "  " << this->lattice[i][2] << "\n";
                 }
             }
 
-            for (int i : this->dopant_indices) {
-                output << this->lattice[i][0] << "  " << this->lattice[i][1] << "  " << this->lattice[i][1] << "\n"; 
+            int total = 0;
+            for (int i = 0; i < this->dopants.size() / 2; i ++) {
+                for (int j = total; j < stoi(this->dopants[2*i + 1]) + total; j ++) {
+                    output << this->lattice[this->dopant_indices[j]][0] << "  " << this->lattice[this->dopant_indices[j]][1] << "  " << this->lattice[this->dopant_indices[j]][2] << endl;
+                }
+                total += stoi(this->dopants[2*i + 1]);
             }
             output.close();
 

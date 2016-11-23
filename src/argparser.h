@@ -31,7 +31,8 @@ class ArgParser {
             ("dopants", po::value<vector<string>>()->multitoken()->default_value(vector<string>(), ""), "Dopants type followed by number of dopant atoms to insert into lattice.")
             ("number", po::value<int>()->default_value(10000), "Number of configurations to generate.")
             ("etarget", po::value<double>()->default_value(1000000.), "Target energy when sampling lattices.")
-            ("seed", po::value<int>()->default_value(13), "Random seed.");
+            ("seed", po::value<int>()->default_value(13), "Random seed.")
+            ("beta", po::value<double>()->default_value(1.0), "Inverse temperature used in the Bolzmann factor.");
             po::store(po::parse_command_line(argc, argv, this->desc), this->vm);
             po::notify(this->vm);
 
